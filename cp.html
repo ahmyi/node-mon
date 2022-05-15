@@ -1,0 +1,259 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+</head>
+<body>
+<div id="chartContainer" style="height: 480px; width: 34%;"></div>
+<div id="chart2Container" style="position: absolute; top: 0px; right: 0;height: 480px; width: 33%;"></div>
+<div id="chart3Container" style="position: absolute; top: 0px; left: 33%;height: 480px; width: 33%;"></div>
+<div id="gridContainer" style="width: 100%;"></div>
+
+<script src="https://canvasjs.com/assets/script/jquery-1.11.1.min.js"></script>
+<script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+<script>
+window.onload = function() {
+	var cumPanthera = [];
+	var cumFelidea = [];
+	var diffFelidea = [];
+	var diffPanthera = [];
+	var globalCumm = [];
+	var chartData = [];
+	var blockTime = [];
+	const chart = new CanvasJS.Chart("chartContainer", {
+		animationEnabled: true,
+		zoomEnabled: true, 
+		theme: "light2",
+		title: {
+			text: "Difficulty Cummulative"
+		},
+		axisX: {
+			title: "Height",
+			includeZero: true
+		},
+		axisY: [{
+			title: "Cummulative Difficulty",
+			titleFontSize: 24,
+			includeZero: true
+		}],
+		toolTip: {
+			shared: true
+		},
+		legend: {
+			cursor: "pointer",
+			verticalAlign: "top",
+			horizontalAlign: "center",
+			dockInsidePlotArea: true,
+			// itemclick: toogleDataSeries
+		},
+		data: [{
+			showInLegend: true,
+			type:"line",
+			name: "Global (Cum)",
+			dataPoints: globalCumm,
+			// color: "#C24642",
+		},{
+			showInLegend: true,
+			type:"line",
+			name: "Panthera (Cum)",
+			dataPoints: cumPanthera,
+			color: "#C24642",
+		}]
+	});
+	const chart2 = new CanvasJS.Chart("chart2Container", {
+		animationEnabled: true,
+		zoomEnabled: true, 
+		theme: "light2",
+		title: {
+			text: "Difficulty Curve"
+		},
+		axisX: {
+			title: "Height",
+			includeZero: true
+		},
+		axisY: [{
+			title: "Difficulty",
+			titleFontSize: 24,
+			includeZero: true
+		}],
+		toolTip: {
+			shared: true
+		},
+		legend: {
+			cursor: "pointer",
+			verticalAlign: "top",
+			horizontalAlign: "center",
+			dockInsidePlotArea: true,
+			// itemclick: toogleDataSeries
+		},
+		data: [{
+			showInLegend: true,
+			type:"line",
+			name: "Felidea",
+			dataPoints: diffFelidea,
+			color: "#7F6084",
+		},{
+			showInLegend: true,
+			type:"line",
+			name: "Panthera",
+			dataPoints: diffPanthera,
+			color:"#C23342"
+		}]
+	});
+	const chart3 = new CanvasJS.Chart("chart3Container", {
+		animationEnabled: true,
+		zoomEnabled: true, 
+		theme: "light2",
+		title: {
+			text: "Block Time"
+		},
+		axisX: {
+			title: "Height",
+			includeZero: true
+		},
+		axisY: {
+			title: "Block Time (s)",
+			titleFontSize: 24,
+			includeZero: true
+		},
+		toolTip: {
+			shared: true
+		},
+		legend: {
+			cursor: "pointer",
+			verticalAlign: "top",
+			horizontalAlign: "center",
+			dockInsidePlotArea: true,
+			// itemclick: toogleDataSeries
+		},
+		data: [{
+			showInLegend: true,
+			type:"line",
+			name: "Block Time",
+			dataPoints: blockTime,
+			// color:"#cceeff52"
+		}]
+	});
+	const update = d => {
+		const height = d.height;
+		chartData.push([
+			parseInt(height),
+			height % 4 === 0 ? "(D)" : "",
+			d.cumulative_difficulty,
+			d.norm_cumulative_difficulty,
+			d.norm_cumulative_difficulty-d.difficulty,
+			d.diardi_cumulative_difficulty,
+			d.diardi_cumulative_difficulty-d.diardi_difficulty,
+			d.difficulty,
+			(d.difficulty/120).toFixed(2),
+			d.diardi_difficulty,
+			(d.diardi_difficulty/120).toFixed(2),
+		]);
+		chartData.sort((a, b) => {
+		    return b[0] - a[0];
+		});
+		grid.updateConfig({data:chartData}).forceRender();
+		blockTime.push({
+			x:height,
+			y:d.block_time
+		});
+		globalCumm.push({
+			x:height,
+			y:d.cumulative_difficulty
+		});
+		cumPanthera.push({
+			x:height,
+			y:d.norm_cumulative_difficulty
+		})
+		cumFelidea.push({
+			x:height,
+			y:d.diardi_cumulative_difficulty
+		})
+		diffFelidea.push({
+			x:height,
+			y:d.diardi_difficulty
+		})
+		diffPanthera.push({
+			x:height,
+			y:d.difficulty
+		})
+		chart.render();
+		chart2.render();
+		chart3.render();
+	}
+	let savedHeights = [];
+
+	const addData = function(res) {
+		if(!('count' in res)) return;
+		const store = localStorage.getItem("height");
+		const reset = (store && store > res.count);
+		let heights = Array.from(Array(res.count).keys());
+		localStorage.setItem("height", res.count);
+		const minHeight = res.count - 100;
+		$.each(heights, i => {
+			const height = heights[i];
+			if(height < minHeight) return;
+			if(savedHeights.indexOf(height) >= 0) return;
+			savedHeights.push(height);
+			const sh = localStorage.getItem(height);
+
+			if(!reset && sh) {
+				update(JSON.parse(sh));
+				return
+			}
+			$.getJSON("http://localhost:3000/block?height=" + height, d => {
+				localStorage.setItem(height, JSON.stringify(d));
+				localStorage.setItem("json", JSON.stringify(savedHeights));
+				update(d);
+			});
+		})
+	}
+	const grid = new gridjs.Grid({
+		autoWidth:true,
+		exportEnabled: true,
+	  columns: [
+	   'Height',
+	   'Diardi',
+	   'Cumm',
+	   'Panthera Cumm (c)',
+	   'Panthera Cumm',
+	   'Felidea Cumm (c)',
+	   'Felidea Cumm',
+	   'Panthera Difficulty',
+	   'Panthera Hashrate',
+	   'Felidea Difficulty',
+	   'Felidea Hashrate'
+	  ],
+	  search: {
+	    enabled: true
+	  },
+	  sort: true,
+	   pagination: {
+	    enabled: true,
+	    limit: 20,
+	    summary: true
+	  },
+	  data: [],
+	}).render(document.getElementById("gridContainer"));
+
+	const sleep = () => new Promise(r => setTimeout(r, 30000));
+	const refresh = () => new Promise((r,e) => {
+		$.getJSON("http://localhost:3000", addData)
+		.done(function() {
+		    r();
+		})
+		.fail(function() {
+		    e();
+		})
+	});
+	(async () => {
+		while(true){
+			await refresh();
+			await sleep();
+		}
+	})();
+}
+</script>
+</body>
+</html>

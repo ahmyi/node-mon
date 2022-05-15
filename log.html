@@ -1,0 +1,66 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+<style>
+/*
+tr:nth-of-type(4n) td {
+   background: #fff;
+}
+*/
+tr:nth-of-type(even) td {
+   background: #fea;
+}
+</style>
+</head>
+<body>
+<div id="gridContainer" style="width: 100%;"></div>
+
+<script src="https://canvasjs.com/assets/script/jquery-1.11.1.min.js"></script>
+<script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+
+<script>
+window.onload = function() {
+	const addData = function(data) {
+		grid.updateConfig({data}).forceRender();
+		// setTimeout(function(){refresh()}, 10000);
+	}
+	const refresh = function() {
+		$.getJSON("http://localhost:3000/log", addData);
+	}
+
+	const grid = new gridjs.Grid({
+		autoWidth:true,
+		exportEnabled: true,
+	  columns: [
+	   'Timestamp',
+	   'Log'
+	  ],
+	  search: {
+	    enabled: true
+	  },
+	  sort: true,
+	   pagination: {
+	    enabled: true,
+	    limit: 20,
+	    summary: true
+	  },
+	 //  style:{
+		// "tr:nth-child(even)" : {'background-color': '#f2f2f2 !important'}
+	 //  },
+	  // search: {
+	  //   selector: (cell, rowIndex, cellIndex) => cellIndex === 0 ? cell.height : cell
+	  // },
+	  data: [],
+	}).render(document.getElementById("gridContainer"));
+
+	refresh();
+	// let h = 57;
+	// setInterval(() => {
+	// 	$.getJSON("http://localhost:3000/?height=" +h+ "&diff=" +h+ "&algo=panthera", d => h++);
+	// }, 1000);
+}
+</script>
+</body>
+</html>

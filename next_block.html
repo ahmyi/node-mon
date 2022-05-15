@@ -1,0 +1,225 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+<style>
+/*
+tr:nth-of-type(4n) td {
+   background: #fff;
+}
+*/
+tr:nth-of-type(even) td {
+   background: #fea;
+}
+</style>
+</head>
+<body>
+<div id="chartContainer" style="height: 480px; width: 100%;"></div>
+<div id="gridContainer" style="width: 100%;"></div>
+
+<script src="https://canvasjs.com/assets/script/jquery-1.11.1.min.js"></script>
+<script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+<script>
+window.onload = function() {
+	var dataPoints1 = [];
+	var dataPoints2 = [];
+	var dataPoints3 = [];
+	var checkedHeights = {};
+	var promising = [];
+	const chart = new CanvasJS.Chart("chartContainer", {
+		animationEnabled: true,
+		zoomEnabled: true, 
+		theme: "light2",
+		title: {
+			text: "Diff vs Height (For next block)"
+		},
+		axisX: {
+			title: "Height",
+			includeZero: true
+		},
+		axisY: {
+			title: "Difficulty",
+			titleFontSize: 24,
+			includeZero: true
+		},
+		axisY2: {
+			title: "Block Time (s)",
+			titleFontSize: 24,
+			includeZero: true
+		},
+		toolTip: {
+			shared: true
+		},
+		legend: {
+			cursor: "pointer",
+			verticalAlign: "top",
+			horizontalAlign: "center",
+			dockInsidePlotArea: true,
+			// itemclick: toogleDataSeries
+		},
+		data: [{
+			showInLegend: true,
+			type:"line",
+			name: "Panthera",
+			dataPoints: dataPoints1,
+			color: "#F08080",
+		},{
+			showInLegend: true,
+			type:"line",
+			name: "Felidea",
+			dataPoints: dataPoints2,
+			// color: "#F08080",
+		},{
+			showInLegend: true,
+			axisYType : "secondary",
+			type:"column",
+			name: "Block Time",
+			dataPoints: dataPoints3,
+			color:"#cceeff52"
+		}]
+	});
+	const addData = function(res) {
+		const table = {};
+		if('panthera' in res) {
+			dataPoints1.length = 0;
+			$.each(res.panthera, i => {
+				const res1 = res.panthera[i];
+				dataPoints1.push({
+					x: res1.height,
+					y: res1.diff
+				});
+				
+				if(!(res1.height in table)) table[res1.height] = {};
+				table[res1.height]['panthera'] = res1.diff;
+			});
+		}
+		if('felidea' in res) {
+			dataPoints2.length = 0;
+
+			$.each(res.felidea, i => {
+				const res2 = res.felidea[i];
+				dataPoints2.push({
+					x: res2.height,
+					y: res2.diff
+				});
+				if(!(res2.height in table)) table[res2.height] = {};
+				table[res2.height]['felidea'] = res2.diff;
+				
+			});
+		}
+		if(table) {
+			
+			let heights = Object.keys(table).reverse();
+			let data = [];
+			$.each(heights, h => {
+				const height = heights[h];
+				const v = table[height];
+				data.push([
+					height + (height % 4 === 0 ? "(D)" : ""),
+					'panthera' in v ? v.panthera : 0,
+					'panthera' in v ? (v.panthera/120).toFixed(2) : 0,
+					'felidea' in v ? v.felidea : 0,
+					'felidea' in v ? (v.felidea/120).toFixed(2) : 0,
+				]);
+				grid.updateConfig({data}).forceRender();
+			});
+			heights.shift();
+			$.each(heights, h => {
+				const height = heights[h];
+				if(!(height in checkedHeights)) {
+					promising.push(new Promise((resolve,reject) => {
+							try{
+								$.getJSON("http://localhost:3000/block?height=" + height, d => {
+									checkedHeights[height] = d.timestamp / 60;
+									resolve({
+										height,
+										timestamp: d.timestamp / 60
+									});
+								});
+							} catch(e) {
+								reject();
+							}
+						}));
+				}
+			});
+		}
+	}
+
+	const grid = new gridjs.Grid({
+		autoWidth:true,
+		exportEnabled: true,
+	  columns: [
+	   'Height',
+	   'Panthera Difficulty',
+	   'Panthera Hashrate',
+	   'Felidea Difficulty',
+	   'Felidea Hashrate'
+	  ],
+	  search: {
+	    enabled: true
+	  },
+	  sort: true,
+	   pagination: {
+	    enabled: true,
+	    limit: 20,
+	    summary: true
+	  },
+	 //  style:{
+		// "tr:nth-child(even)" : {'background-color': '#f2f2f2 !important'}
+	 //  },
+	  // search: {
+	  //   selector: (cell, rowIndex, cellIndex) => cellIndex === 0 ? cell.height : cell
+	  // },
+	  data: [],
+	}).render(document.getElementById("gridContainer"));
+
+	const sleep = () => new Promise(r => setTimeout(r, 30000));
+	const refresh = () => new Promise((r,e) => {
+		$.getJSON("http://localhost:3000", addData)
+		.done(function() {
+		    r();
+		})
+		.fail(function() {
+		    e();
+		})
+	});
+	(async () => {
+		while(true){
+			await refresh();
+
+			await Promise.allSettled(promising).finally(s => {
+				// if(s)
+				// s.map(a => {
+				// 	checkedHeights[a.height] = a.timestamp;
+				// })
+				const sortedChecks = Object.keys(checkedHeights).sort().reduce((r, k) => (r[k] = checkedHeights[k], r), {});
+				dataPoints3.length = 0;
+				Object.values(sortedChecks).map((value, index, array) => {
+					var diff = index-1 >= 0 ? value - array[index-1] : 0;
+					dataPoints3.push({
+						y : diff,
+						x: Object.keys(sortedChecks)[index]
+					});
+					chart.render();
+
+				});
+				
+				promising.length = 0;
+
+			// 	
+			});
+				
+			
+			chart.render();
+			await sleep();
+		}
+	})();
+	// let h = 57;
+	// setInterval(() => {
+	// 	$.getJSON("http://localhost:3000/?height=" +h+ "&diff=" +h+ "&algo=panthera", d => h++);
+	// }, 1000);
+}
+</script>
+</body>
+</html>
